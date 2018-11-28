@@ -1,20 +1,37 @@
 $LOAD_PATH.unshift File.expand_path(File.dirname($PROGRAM_NAME))
-require 'optparse'
-require "compiler"
+require "optparse"
+require "pl0/codeGen"
+require "pl0/compiler"
+require "pl0/getSource"
+require "pl0/table"
+STDOUT.sync = true
 
-printTable = false;  # trueなら各ブロックの記号表を印字
-#objCode = false;   # trueなら目的コードを印字
-#trace = false;     # trueなら実行のトレース情報を印字
+module PL0
+  class PL0
+    def initialize(sourceFileName, params)
+      @compiler = Compiler.new(sourceFileName, params)
+    end
+
+    def run
+      if (@compiler.run)
+        @compiler.execute
+      end
+    end
+  end
+end
+
+params = {s: false, l: false}   # s: 各ブロックの記号表を印字,
+                                # l: コード表を印字
 
 opt = OptionParser.new
-opt.on('-s') {|v| printTable = v }
-#opt.on('-o') {|v| objCode = v }
-#opt.on('-t') {|v| trace = v }
+opt.on('-s') {|v| params[:s] = v }
+opt.on('-l') {|v| params[:l] = v }
 opt.parse!(ARGV)
 
-unless ARGV
-  print "USAGE: [-(s|o|t)] sourceFileName\n"
+if ARGV.size == 0
+  print "USAGE: [-s] [-l] sourceFileName\n"
   exit 1
 end
 sourceFileName = ARGV[0]
-compile(sourceFileName, printTable)
+
+PL0::PL0.new(sourceFileName, params).run
