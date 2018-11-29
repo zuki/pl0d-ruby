@@ -298,9 +298,9 @@ module PL0
       @Fhtml.printf("<BODY>\n<PRE>\n")
     end
 
-    def finalSource
-      if @token && @token.symbol == :"."
-        printToken(@token)
+    def finalSource(t)
+      if t.symbol == :"."
+        printToken(t)
       else
         errorInsert(:".")
         end

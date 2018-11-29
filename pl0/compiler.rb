@@ -17,7 +17,7 @@ module PL0
       @token = @lexer.nextToken    # 最初のトークン
       @table.blockBegin(FIRSTADDR) # これ以後の宣言は新しいブロックのもの
       block(0)                     # 0 はダミー（主ブロックの関数名はない）
-      @lexer.finalSource
+      @lexer.finalSource(@token)
       @lexer.closeSource
       no = @lexer.errorN           # エラーメッセージの個数
       if no >= 1
