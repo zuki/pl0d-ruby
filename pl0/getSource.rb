@@ -36,9 +36,7 @@ module PL0
     FIRSTADDR = 2  # 各ブロックの最初の変数のアドレス
     MINERROR = 3   # エラーがこれ以下なら実行
 
-    # @token       処理対象のトークン
-    # @ctoken
-    attr_accessor :token, :ctoken
+    # @ctoken      一つ前のトークン
 
     def initialize(sourceFileName)
       @source = sourceFileName
@@ -288,7 +286,6 @@ module PL0
       @lineNo = 0            # ソース行
       @lineIndex = -1        # ソース行内の文字位置
       @ch = "\n"             # ソースの現在位置の文字
-      @token = nil           # 処理対象のトークン
       @cToken = nil          # カレントトークン
       initCharClassT
       @Fhtml.printf("<HTML>\n")   # htmlコマンド
