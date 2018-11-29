@@ -169,7 +169,7 @@ module PL0
       while( id != @nameTable[i].name )
         i -= 1
       end
-      @nameTable[0] = nil
+      @nameTable[0] = nil              # 番兵を削除（しないとchangeVでエラー）
       if  i > 0                        # 名前があった
         return i
       else                             # 名前がなかった
