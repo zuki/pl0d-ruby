@@ -213,7 +213,7 @@ module PL0
           @token = @lexer.nextToken
           @codegen.genCodeO(:wrl)        # 改行を出力するwrl命令
           return
-        when :end, :";"                 # 空文を読んだことにして終り
+        when :end, :";"           # 空文を読んだことにして終り
           return
         else                      # 文の先頭のキーまで読み捨てる
           @lexer.errorDelete(@token)     # 今読んだトークンを読み捨てる
