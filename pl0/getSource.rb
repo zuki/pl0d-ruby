@@ -6,8 +6,8 @@ module PL0
     # @spaces                # そのトークンの前のスペースの個数
     # @cr                    # その前のCRの個数
     # @printed               # トークンは印字済みか
-    attr_reader :kind, :value, :symbol, :spaces, :cr, :printed
-    attr_writer :kind, :printed
+    attr_accessor :kind, :printed
+    attr_reader :value, :symbol, :spaces, :cr
 
     def initialize(sp, c, p, k, sy, v)
       @spaces, @cr, @printed = sp, c, p
