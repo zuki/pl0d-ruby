@@ -4,7 +4,6 @@ require "pl0/codeGen"
 require "pl0/compiler"
 require "pl0/getSource"
 require "pl0/table"
-STDOUT.sync = true
 
 module PL0
   class PL0
