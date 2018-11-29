@@ -165,7 +165,7 @@ module PL0
     def searchT(id, k) # 名前idの名前表の位置を返す
                                        # 未宣言の時エラーとする
       i = @tIndex
-      @nameTable[0] = TableE.new(id, k,)  # 番兵をたてる
+      @nameTable[0] = TableE.new(id, k)  # 番兵をたてる
       while( id != @nameTable[i].name )
         i -= 1
       end
