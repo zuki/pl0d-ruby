@@ -47,13 +47,11 @@ module PL0
     def openSource
       @Fsource = File.open(@source, "r")
       @Fhtml = File.open(@source+".html", "w")
-      @Fobj = File.open(@source+".asm", "w")
     end
 
     def closeSource
       @Fsource.close
       @Fhtml.close
-      @Fobj.close
     end
 
     def errorNoCheck     # エラーの個数のカウント、多すぎたら終わり
