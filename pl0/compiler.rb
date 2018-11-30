@@ -10,16 +10,16 @@ module PL0
       @list_code = params[:l]
     end
 
-    def run
+    def parse
       @lexer.openSource
       printf("start compilation\n")
       @lexer.initSource            # getSourceの初期設定
-      @token = @lexer.nextToken    # 最初のトークン
+      @token = @lexer.nextToken(nil)     # 最初のトークン
       @table.blockBegin(FIRSTADDR) # これ以後の宣言は新しいブロックのもの
       block(0)                     # 0 はダミー（主ブロックの関数名はない）
       @lexer.finalSource(@token)
       @lexer.closeSource
-      no = @lexer.errorN           # エラーメッセージの個数
+      no = Log.errorN           # エラーメッセージの個数
       if no >= 1
         printf("%d error%s\n", no, (no==1 ? "" : "s"))
       end
@@ -36,13 +36,13 @@ module PL0
       while true                     # 宣言部のコンパイルを繰り返す
         case @token.symbol
         when :const                  # 定数宣言部のコンパイル
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
           constDecl
         when :var                    # 変数宣言部のコンパイル
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
           varDecl
         when :function               # 関数宣言部のコンパイル
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
           funcDecl
         else                         # それ以外なら宣言部は終わり
           break;
@@ -61,25 +61,25 @@ module PL0
         if @token.kind == :_UserId
           @token.kind = :_ConstId   # 印字のための情報のセット
           temp = @token             # 名前を入れておく
-          @token = @lexer.checkGet(@lexer.nextToken, :"=") # 名前の次は"="のはず
+          @token = @lexer.checkGet(@lexer.nextToken(@token), :"=") # 名前の次は"="のはず
           if @token.kind == :_Num
             @table.enterTconst(temp.symbol, @token.value)  # 定数名と値をテーブルに
           else
-            @lexer.errorType("number", @token)
+            Log.error("assign not number", @token)
           end
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
         else
-          @lexer.errorMissingId
+          Log.error("missing const name", @token)
         end
         if @token.symbol != :","       # 次がコンマなら定数宣言が続く
           if @token.kind == :UserId    # 次が名前ならコンマを忘れたことにする
-            @lexer.errorInsert(:",")
+            Log.error("insert ','", @token)
             next
           else
             break
           end
         end
-        @token = @lexer.nextToken
+        @token = @lexer.nextToken(@token)
       end
       @token = @lexer.checkGet(@token, :";")    # 最後は";"のはず
     end
@@ -89,19 +89,19 @@ module PL0
         if @token.kind == :_UserId
           @token.kind = :_VarId            # 印字のための情報のセット
           @table.enterTvar(@token.symbol)  # 変数名をテーブルに、番地はtableが決める
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
         else
-          @lexer.errorMissingId
+          Log.error("missing var name", @token)
         end
         if @token.symbol != :","           # 次がコンマなら変数宣言が続く
           if @token.kind == :_UserId       # 次が名前ならコンマを忘れたことにする
-            @lexer.errorInsert(:",")
+            Log.error("insert ','", @token)
             next
           else
             break
           end
         end
-        @token = @lexer.nextToken
+        @token = @lexer.nextToken(@token)
       end
       @token = @lexer.checkGet(@token, :";")      # 最後は";"のはず
     end
@@ -112,48 +112,48 @@ module PL0
         fIndex = @table.enterTfunc(@token.symbol, @codegen.nextCode)
                    # 関数名をテーブルに登録。
                    # その先頭番地は、まず、次のコードの番地とする
-        @token = @lexer.checkGet(@lexer.nextToken(), :"(")
+        @token = @lexer.checkGet(@lexer.nextToken(@token), :"(")
         @table.blockBegin(FIRSTADDR)         # パラメタ名のレベルは関数のブロックと同じ
         while true
           if @token.kind == :_UserId         # パラメタ名がある場合
             @token.kind = :_ParId            # 印字のための情報のセット
             @table.enterTpar(@token.symbol)  # パラメタ名をテーブルに登録
-            @token = @lexer.nextToken
+            @token = @lexer.nextToken(@token)
           else
             break
           end
           if @token.symbol != :","           # 次がコンマならパラメタ名が続く
             if @token.kind == :_UserId       # 次が名前ならコンマを忘れたことに
-              @lexer.errorInsert(:",")
+              Log.error("insert ','", @token)
               next
             else
               break
             end
           end
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
         end
         @token = @lexer.checkGet(@token, :")") # 最後は")"のはず
         @table.endpar                # パラメタ部が終わったことをテーブルに連絡
         if @token.symbol == :";"
-          @lexer.errorDelete(@token)
-          @token = @lexer.nextToken
+          Log.error(sprintf("delete token: %s", @token.symbol||@token.value), @token)
+          @token = @lexer.nextToken(@token)
         end
         block(fIndex)                # ブロックのコンパイル、その関数名を渡す
         @token = @lexer.checkGet(@token, :";")  # 最後は";"のはず
       else
-        @lexer.errorMissingId               # 関数名がない
+        Log.error("missing function name", @token)         # 関数名がない
       end
     end
 
     def statement    # 文のコンパイル
       while true
         if @token.kind == :_UserId       # 代入文のコンパイル
-          tIndex = @table.searchT(@token.symbol, :_VarId)  # 左辺の変数のインデックス
+          tIndex = @table.searchT(@token, :_VarId)  # 左辺の変数のインデックス
           @token.kind = k = @table.kindT(tIndex) # 印字のための情報のセット
           if (k != :_VarId && k != :_ParId)      # 変数名かパラメタ名のはず
-            @lexer.errorType("var/par", @token)
+            Log.error("assign lhs is not var/par", @token)
           end
-          @token = @lexer.checkGet(@lexer.nextToken(), :":=")  # ":="のはず
+          @token = @lexer.checkGet(@lexer.nextToken(@token), :":=")  # ":="のはず
           expression                             # 式のコンパイル
           @codegen.genCodeT(:sto, @table.relAddr(tIndex))    # 左辺への代入命令
           return
@@ -161,7 +161,7 @@ module PL0
 
         case @token.symbol
         when :if                     # if文のコンパイル
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
           condition                      # 条件式のコンパイル
           @token = @lexer.checkGet(@token, :then)       # thenのはず
           backP = @codegen.genCodeV(:jpc, 0)            # jpc命令
@@ -169,33 +169,33 @@ module PL0
           @codegen.backPatch(backP)      # 上のjpc命令へのバックパッチに相当
           return
         when :return                 # return文のコンパイル
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
           expression                     # 式のコンパイル
           @codegen.genCodeR(RelAddr.new(@table.bLevel, @table.fPars))   # ret命令
           return
         when :begin                  # begin . . end文のコンパイル
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
           while true
             statement                    # 文のコンパイル
             while true
               if @token.symbol == :";"   # 次が";"なら文が続く
-                @token = @lexer.nextToken
+                @token = @lexer.nextToken(@token)
                 break
               end
               if @token.symbol == :end   # 次がendなら終り
-                @token = @lexer.nextToken
+                @token = @lexer.nextToken(@token)
                 return
               end
               if isStBeginKey(@token)    # 次が文の先頭記号なら
-                @lexer.errorInsert(:";") # ";"を忘れたことにする
+                Log.error("insert ';'", @token.prev) # ";"を忘れたことにする
                 break
               end
-              @lexer.errorDelete(@token) # それ以外ならエラーとして読み捨てる
-              @token = @lexer.nextToken
+              Log.error(sprintf("delete '%s' and skip to a new statement", @token.symbol || @token.value), @token)  # それ以外ならエラーとして読み捨てる
+              @token = @lexer.nextToken(@token)
             end
           end
         when :while                # while文のコンパイル
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
           backP2 = @codegen.nextCode     # while文の最後のjmp命令の飛び先
           condition                      # 条件式のコンパイル
           @token = @lexer.checkGet(@token, :do)  # "do"のはず
@@ -205,19 +205,19 @@ module PL0
           @codegen.backPatch(backP)      # 偽のとき飛び出すjpc命令へのバックパッチに相当
           return
         when :write                # write文のコンパイル
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
           expression                     # 式のコンパイル
           @codegen.genCodeO(:wrt)  # その値を出力するwrt命令
           return
         when :writeln              # writeln文のコンパイル
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
           @codegen.genCodeO(:wrl)        # 改行を出力するwrl命令
           return
         when :end, :";"           # 空文を読んだことにして終り
           return
         else                      # 文の先頭のキーまで読み捨てる
-          @lexer.errorDelete(@token)     # 今読んだトークンを読み捨てる
-          @token = @lexer.nextToken
+          Log.error(sprintf("delete '%s' and skip to a new statement", @token.symbol||@token.value), @token)  # 今読んだトークンを読み捨てる
+          @token = @lexer.nextToken(@token)
         end
       end
     end
@@ -225,7 +225,7 @@ module PL0
     def expression   # 式のコンパイル
       k = @token.symbol
       if (k == :"+" || k == :"-")
-        @token = @lexer.nextToken
+        @token = @lexer.nextToken(@token)
         term
         @codegen.genCodeO(:neg) if k == :"-"
       else
@@ -233,7 +233,7 @@ module PL0
       end
       k = @token.symbol
       while (k == :"+" || k == :"-")
-        @token = @lexer.nextToken
+        @token = @lexer.nextToken(@token)
         term
         if k == :"-"
           @codegen.genCodeO(:sub)
@@ -248,7 +248,7 @@ module PL0
       factor
       k = @token.symbol
       while (k == :"*" || k == :"/")
-        @token = @lexer.nextToken()
+        @token = @lexer.nextToken(@token)
         factor
         if (k == :"*")
           @codegen.genCodeO(:mul)
@@ -261,57 +261,56 @@ module PL0
 
     def factor       # 式の因子のコンパイル
       if @token.kind == :_UserId
-        tIndex = @table.searchT(@token.symbol, :_VarId)
+        tIndex = @table.searchT(@token, :_VarId)
         @token.kind = k = @table.kindT(tIndex)   # 印字のための情報のセット
         case k
         when :_VarId, :_ParId                    # 変数名かパラメタ名
           @codegen.genCodeT(:lod, @table.relAddr(tIndex))
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
         when :_ConstId                           # 定数名
           @codegen.genCodeV(:lit, @table.val(tIndex))
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
         when :_FuncId                            # 関数呼び出し
-          @token = @lexer.nextToken
+          @token = @lexer.nextToken(@token)
           if @token.symbol == :"("
             i=0                                  # iは実引数の個数
-            @token = @lexer.nextToken
+            @token = @lexer.nextToken(@token)
             if @token.symbol != :")"
               while true
                 expression; i += 1               # 実引数のコンパイル
                 if @token.symbol == :","         # 次がコンマなら実引数が続く
-                  @token = @lexer.nextToken
+                  @token = @lexer.nextToken(@token)
                   next
                 end
                 @token = @lexer.checkGet(@token, :")")
                 break
               end
             else
-              @token = @lexer.nextToken
+              @token = @lexer.nextToken(@token)
             end
             if @table.pars(tIndex) != i
-              @lexer.errorMessage("\\#par")      # pars(tIndex)は仮引数の個数
+              Log.error("\\#par", @token)        # pars(tIndex)は仮引数の個数
             end
           else
-            @lexer.errorInsert(:"(")
-            @lexer.errorInsert(:")")
+            Log.error("insert '()'", @token)
           end
           @codegen.genCodeT(:cal, @table.relAddr(tIndex))  # call命令
         end
       elsif @token.kind == :_Num                 # 定数
         @codegen.genCodeV(:lit, @token.value)
-        @token = @lexer.nextToken
+        @token = @lexer.nextToken(@token)
       elsif @token.symbol == :"("                # 「(」「因子」「)」
-        @token = @lexer.nextToken
+        @token = @lexer.nextToken(@token)
         expression
         @token = @lexer.checkGet(@token, :")")
       end
       case @token.kind                           # 因子の後がまた因子ならエラー
       when :_UserId, :_Num
-        @lexer.errorMissingOp
+        Log.error(sprintf("factor + id/num '%s': missing opcode", @token.symbol||@token.value), @token)
         factor
       when :_KeySym
         if @token.symbol == :"("
-          @lexer.errorMissingOp
+          Log.error("factor + '(': missing opcode", @token)
           factor
         else
           return
@@ -323,7 +322,7 @@ module PL0
 
     def condition    # 条件式のコンパイル
       if @token.symbol == :odd
-        @token = @lexer.nextToken
+        @token = @lexer.nextToken(@token)
         expression
         @codegen.genCodeO(:odd)
       else
@@ -333,9 +332,9 @@ module PL0
         when :"=", :"<", :">", :"<>", :"<=", :">="
            # do nothing
         else
-          @lexer.errorType("rel-op", @token)
+          Log.error("symbol is not an operator", @token)
         end
-        @token = @lexer.nextToken
+        @token = @lexer.nextToken(@token)
         expression
         case k
         when :"="  then  @codegen.genCodeO(:eq)

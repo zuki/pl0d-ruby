@@ -12,7 +12,7 @@ module PL0
     end
 
     def run
-      if (@compiler.run)
+      if (@compiler.parse)
         @compiler.execute
       end
     end

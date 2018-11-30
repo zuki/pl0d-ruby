@@ -3,40 +3,49 @@ module PL0
     # @kind  :_KeyWd, :_KeySym, :_UserId (:_FuncId, :_ParId, :_VarId), :_Num,
     # @value                 # トークン値
     # @symbol                # トークン名
-    # @spaces                # そのトークンの前のスペースの個数
-    # @cr                    # その前のCRの個数
-    # @printed               # トークンは印字済みか
-    attr_accessor :kind, :printed
-    attr_reader :value, :symbol, :spaces, :cr
+    # @line                  # トークンが出現した行
+    # @pos                   # トークンが出現した行内の位置
+    # @prev                  # 一つ前のトークン
+    attr_accessor :kind, :prev
+    attr_reader :value, :symbol, :line, :pos
 
-    def initialize(sp, c, p, k, sy, v)
-      @spaces, @cr, @printed = sp, c, p
+    def initialize(line, pos, k, sy, v)
+      @line, @pos = line, pos, prev
       @kind, @symbol, @value = k, sy, v
+    end
+
+    def debug_line
+      sprintf("sym: %s, val: %d, pos: %d", @symbol, @value, @pos)
     end
 
     def to_s
       @symbol.to_s
     end
+  end
 
-    def to_string
-      pre = if @kind == :_Num then @value.to_s else @symbol.to_s end
-      pre += " "+@kind.to_s+" spaces:"+@spaces.to_s+",cr:"+@cr.to_s+",printed:"+@printed.to_s+"\n"
+  class Log
+    MAXERROR = 30          # これ以上のエラーがあったら終り
+    @@error_no = 0
+
+    def self.error(message, token, force_abort=false)
+      header = token ? sprintf("[% 3d:% 3d]", token.line, token.pos) : "[---:---]"
+      printf("%s %s\n", header, message);
+      @@error_no += 1
+      if (@@error_no > MAXERROR || force_abort)
+        raise "too many errors"
+      end
+    end
+
+    def self.errorN
+      @@error_no
     end
   end
 
   class Lexer
-    INSERT_C = "#0000FF"   # 挿入文字の色
-    DELETE_C = "#FF0000"   # 削除文字の色
-    TYPE_C = "#00FF00"     # タイプエラー文字の色
-
-    TAB = 4                # タブのスペース
     MAXNUM = 14            # 定数の最大桁数
-    MAXERROR = 30          # これ以上のエラーがあったら終り
 
     FIRSTADDR = 2  # 各ブロックの最初の変数のアドレス
     MINERROR = 3   # エラーがこれ以下なら実行
-
-    # @ctoken      一つ前のトークン
 
     def initialize(sourceFileName)
       @source = sourceFileName
@@ -44,80 +53,10 @@ module PL0
 
     def openSource
       @Fsource = File.open(@source, "r")
-      @Fhtml = File.open(@source+".html", "w")
     end
 
     def closeSource
       @Fsource.close
-      @Fhtml.close
-    end
-
-    def errorNoCheck     # エラーの個数のカウント、多すぎたら終わり
-      @errorNo += 1
-      if @errorNo > MAXERROR
-        @Fhtml.printf("too many errors\n</PRE>\n</BODY>\n</HTML>\n")
-        raise "abort compilation\n"
-      end
-    end
-
-    def errorMessage(m)  # エラーメッセージを.htmlファイルに出力
-      @Fhtml.printf( "<FONT COLOR=%s>%s</FONT>", TYPE_C, m)
-      errorNoCheck
-    end
-
-    def errorF(m)        # エラーメッセージを出力し、コンパイル終了
-      errorMessage(m)
-      @Fhtml.printf( "fatal errors\n</PRE>\n</BODY>\n</HTML>\n")
-      raise "abort compilation\n"
-    end
-
-    def errorInsert(s)   # s: key symbol の Stringを.htmlファイルに挿入
-      @Fhtml.printf("<FONT COLOR=%s><b>%s</b></FONT>", INSERT_C, s.to_s)
-      errorNoCheck
-    end
-
-    def errorMissingId   # 名前がないとのメッセージを.htmlファイルに挿入
-      @Fhtml.printf("<FONT COLOR=%s>Id</FONT>", INSERT_C)
-      errorNoCheck
-    end
-
-    def errorMissingOp   # 演算子がないとのメッセージを.htmlファイルに挿入
-      @Fhtml.printf("<FONT COLOR=%s>@</FONT>", INSERT_C)
-      errorNoCheck
-    end
-
-    def errorType(m, t)  # 型エラーを.htmlファイルに出力
-      printSpaces(t)
-      @Fhtml.printf("<FONT COLOR=%s>%s</FONT>", TYPE_C, m)
-      case t.kind
-      when :_VarId, :_UserId
-       @Fhtml.printf("%s", t.symbol.to_s)
-      when :_FuncId, :_ParId
-       @Fhtml.printf("<i>%s</i>", t.symbol.to_s)
-      when :_ConstId
-       @Fhtml.printf("<tt>%s</tt>", t.symbol.to_s)
-      end
-      errorNoCheck
-    end
-
-    def printSpaces(t)   # t の前の空白や改行の印字
-      @Fhtml.printf("<br/>" * t.cr) if t.cr > 0
-      @Fhtml.printf("&nbsp\;" * t.spaces) if t.spaces > 0
-    end
-
-    def errorDelete(t)   # 今読んだトークンを読み捨てる
-      printSpaces(t)
-      t.printed = true;
-      case t.kind
-      when :_KeyWd               # 予約語
-        @Fhtml.printf("<FONT COLOR=%s><b>%s</b></FONT>", DELETE_C, t.symbol.to_s)
-      when :_KeySym              # 演算子か区切り記号
-        @Fhtml.printf("<FONT COLOR=%s>%s</FONT>", DELETE_C, t.symbol.to_s)
-      when :_UserId              # Identfier
-        @Fhtml.printf("<FONT COLOR=%s>%s</FONT>", DELETE_C, t.symbol.to_s)
-      when :_Num                 # Num
-        @Fhtml.printf("<FONT COLOR=%s>%d</FONT>", DELETE_C, t.value)
-      end
     end
 
     def nextChar        #    次の１文字を返す関数
@@ -138,8 +77,11 @@ module PL0
       return ch;
     end
 
-    def nextToken
-      printToken(@cToken) if @cToken # 前のトークンを印字
+    def position(len=0)
+      @lineIndex > -1 ? @lineIndex - len : @line.size
+    end
+
+    def nextToken(prev)
       spaces = 0; cr = 0;
       while true                     # 空白や改行をカウント
         if @ch == " "
@@ -166,9 +108,9 @@ module PL0
         case ident
         when :begin, :end, :if, :then, :while, :do, :return,
              :function, :var, :const, :odd, :write, :writeln
-          temp = Token.new(spaces, cr, false, :_KeyWd, ident, 0)
+          temp = Token.new(@lineNo, position(ident.size), :_KeyWd, ident, 0)
         else       # ident == _UserId: ユーザの宣言した名前の場合
-          temp = Token.new(spaces, cr, false, :_UserId, ident, 0)
+          temp = Token.new(@lineNo, position(ident.size), :_UserId, ident, 0)
         end
       when :digit            # number
         num = 0; i = 0
@@ -177,41 +119,40 @@ module PL0
           i += 1
           @ch = nextChar
         end while @charClassT[@ch.ord] == :digit
-        errorMessage("too large") if i > MAXNUM
-        temp = Token.new(spaces, cr, false, :_Num, nil, num)
+        temp = Token.new(@lineNo, position(num.to_s.size), :_Num, nil, num)
+        error("too large", temp) if i > MAXNUM
       when :":"
         @ch = nextChar
         if @ch == '='                # ":="
           @ch = nextChar
-          temp = Token.new(spaces, cr, false, :_KeySym, :":=", 0)
+          temp = Token.new(@lineNo, position(2), :_KeySym, :":=", 0)
         else
-          temp = Token.new(spaces, cr, false, nil, :"nil", 0)
+          temp = Token.new(@lineNo, position, nil, :"nil", 0)
         end
       when :"<"
         @ch = nextChar
         if @ch == '='                #    "<="
           @ch = nextChar
-          temp = Token.new(spaces, cr, false, :_KeySym, :"<=", 0)
+          temp = Token.new(@lineNo, position(2), :_KeySym, :"<=", 0)
         elsif @ch == '>'             #    "<>"
           @ch = nextChar
-          temp = Token.new(spaces, cr, false, :_KeySym, :"<>", 0)
+          temp = Token.new(@lineNo, position(2), :_KeySym, :"<>", 0)
         else
-          temp = Token.new(spaces, cr, false, :_KeySym, :"<", 0)
+          temp = Token.new(@lineNo, position, :_KeySym, :"<", 0)
         end
       when :">"
         @ch = nextChar
         if @ch == '='                # ">="
           @ch = nextChar
-          temp = Token.new(spaces, cr, false, :_KeySym, :">=", 0)
+          temp = Token.new(@lineNo, position(2), :_KeySym, :">=", 0)
         else
-          temp = Token.new(spaces, cr, false, :_KeySym, :">", 0)
+          temp = Token.new(@lineNo, position, :_KeySym, :">", 0)
         end
       else
-        temp = Token.new(spaces, cr, false, :_KeySym, @ch.to_sym, 0)
+        temp = Token.new(@lineNo, position, :_KeySym, @ch.to_sym, 0)
         @ch = nextChar
       end
-      @cToken = temp;
-    #  print(temp.to_string)
+      temp.prev = prev
       return temp
     end
 
@@ -234,37 +175,15 @@ module PL0
       #    t.symbol != s ならエラーメッセージを出し、t と s が共に記号、または予約語なら
       #    t を捨て、次のトークンを読んで返す（ t を s で置き換えたことになる）
       #    それ以外の場合、s を挿入したことにして、t を返す
-      return nextToken if t.symbol == s
+      return nextToken(t) if t.symbol == s
       if ((isKeyWd(s) && t.kind == :_KeyWd) ||
         (isKeySym(s) && t.kind == :_KeySym))
-        errorDelete(t)
-        errorInsert(s)
-        return nextToken
+        Log.error(sprintf("delete token: %s", t.symbol||t.value), t)
+        Log.error(sprintf("insert '#{s}'", s), t)
+        return nextToken(t)
       end
-      errorInsert(s)
+      Log.error("insert '#{s}'", t.prev)
       return t
-    end
-
-    def printToken(t)        #    トークン t の印字
-      return if t.printed
-      t.printed = true
-      printSpaces(t)        #    トークンの前の空白や改行印字
-      case t.kind
-      when :_KeyWd                   # 予約語
-        @Fhtml.printf("<b>%s</b>", t.symbol.to_s)
-      when :_KeySym                  # 演算子か区切り記号
-        @Fhtml.printf("%s", t.symbol.to_s)
-      when :_VarId                   # Var Identfier
-        @Fhtml.printf("%s", t.symbol.to_s)
-      when :_ParId                   # Par Identfier
-        @Fhtml.printf("<i>%s</i>", t.symbol.to_s)
-      when :_FuncId                  # Func Identfier
-        @Fhtml.printf("<i>%s</i>", t.symbol.to_s)
-      when :_ConstId                 # Constar Identfier
-        @Fhtml.printf("<tt>%s</tt>", t.symbol.to_s)
-      when :_Num                     # Num
-        @Fhtml.printf("%d", t.value)
-      end
     end
 
     def initCharClassT
@@ -286,24 +205,11 @@ module PL0
       @lineNo = 0            # ソース行
       @lineIndex = -1        # ソース行内の文字位置
       @ch = "\n"             # ソースの現在位置の文字
-      @cToken = nil          # カレントトークン
       initCharClassT
-      @Fhtml.printf("<HTML>\n")   # htmlコマンド
-      @Fhtml.printf("<HEAD>\n<TITLE>compiled source program</TITLE>\n</HEAD>\n")
-      @Fhtml.printf("<BODY>\n<PRE>\n")
     end
 
     def finalSource(t)
-      if t.symbol == :"."
-        printToken(t)
-      else
-        errorInsert(:".")
-        end
-      @Fhtml.printf("\n</PRE>\n</BODY>\n</HTML>\n")
-    end
-
-    def errorN
-      @errorNo
+      Log.error("insert '.'", t) unless t.symbol == :"."
     end
   end
 end

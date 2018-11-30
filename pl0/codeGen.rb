@@ -67,7 +67,7 @@ module PL0
         @code[@cIndex] = Inst.new
         return
       end
-      errorF "too many code"
+      Log.error "too many code", nil, true
     end
 
     def backPatch(i) # 命令語のバックパッチ（次の番地を）

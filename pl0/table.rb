@@ -162,20 +162,20 @@ module PL0
       end
     end
 
-    def searchT(id, k) # 名前idの名前表の位置を返す
+    def searchT(t, k) # トークンtの名前の名前表の位置を返す
                                        # 未宣言の時エラーとする
       i = @tIndex
-      @nameTable[0] = TableE.new(id, k)  # 番兵をたてる
-      while( id != @nameTable[i].name )
+      @nameTable[0] = TableE.new(t.symbol, k)  # 番兵をたてる
+      while( t.symbol != @nameTable[i].name )
         i -= 1
       end
       @nameTable[0] = nil              # 番兵を削除（しないとchangeVでエラー）
       if  i > 0                        # 名前があった
         return i
       else                             # 名前がなかった
-        #errorType("undef", $token)
+        Log.error(sprintf("undefined name: %s", t.symbol), t)
         if k == :_VarId
-            return enterTvar(id)       # 変数の時は仮登録
+            return enterTvar(t.symbol)       # 変数の時は仮登録
         else
             return 0
         end
