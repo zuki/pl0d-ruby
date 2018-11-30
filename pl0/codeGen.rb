@@ -99,7 +99,7 @@ module PL0
       when 2
         printf(",%d,%d\n", @code[i].addr.level, @code[i].addr.addr)
       when 3
-        printf(",%s\n", @code[i].optr,to_s)
+        printf(",%s\n", @code[i].optr.to_s)
       end
     end
 
